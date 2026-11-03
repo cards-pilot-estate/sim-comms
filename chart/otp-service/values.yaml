@@ -1,0 +1,29 @@
+environment: dev
+image:
+  repository: sim-comms/otp-service
+  tag: local
+  pullPolicy: IfNotPresent
+replicas: 1
+iam:
+  issuer: http://iam.localtest.me/realms/cards
+  jwksUri: http://keycloak.iam.svc.cluster.local:8080/realms/cards/protocol/openid-connect/certs
+# Secret with keys hmac-key and signing-key-pem (make secrets ENV=<env>); never in git.
+secretName: otp-service-secrets
+phone:
+  enabled: true          # the simulated phone UI; dev and uat only
+  host: phone.dev.localtest.me
+  ingressClassName: traefik
+testHooks: false         # profile test-hooks: GET /sim-admin/v1/test/last-code (never routed)
+javaOpts: "-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError -Xss512k"
+resources:
+  requests: { cpu: 50m, memory: 256Mi }
+  limits: { memory: 384Mi }
+redis:
+  image: redis:7-alpine
+  resources:
+    requests: { cpu: 10m, memory: 16Mi }
+    limits: { memory: 64Mi }
+networkPolicy:
+  gatewayNamespace: envoy-gateway-system
+  ingressNamespace: traefik
+  monitoringNamespace: observability

@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otp-service
+  labels: { app.kubernetes.io/name: otp-service, app.kubernetes.io/part-of: sim-comms }
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels: { app.kubernetes.io/name: otp-service }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: otp-service, app.kubernetes.io/part-of: sim-comms }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /actuator/prometheus
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: otp-service
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - { name: APP_ENVIRONMENT, value: {{ .Values.environment | quote }} }
+            - { name: APP_IAM_ISSUER, value: {{ .Values.iam.issuer | quote }} }
+            - { name: APP_IAM_JWKS_URI, value: {{ .Values.iam.jwksUri | quote }} }
+            - { name: APP_IAM_AUDIENCE, value: "comms-api-{{ .Values.environment }}" }
+            - { name: REDIS_HOST, value: otp-redis }
+            - { name: PHONE_UI_ENABLED, value: {{ .Values.phone.enabled | quote }} }
+            - { name: JAVA_OPTS, value: {{ .Values.javaOpts | quote }} }
+            {{- if .Values.testHooks }}
+            - { name: SPRING_PROFILES_ACTIVE, value: test-hooks }
+            {{- end }}
+            - name: OTP_HMAC_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: hmac-key } }
+            - name: OTP_SIGNING_KEY_PEM
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: signing-key-pem } }
+            - name: OTP_SIGNING_PUBLIC_PEM
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: signing-public-pem } }
+          ports:
+            - { name: http, containerPort: 8080 }
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 3
+            failureThreshold: 40
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otp-service
+  labels: { app.kubernetes.io/name: otp-service, app.kubernetes.io/part-of: sim-comms }
+spec:
+  selector: { app.kubernetes.io/name: otp-service }
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+---
+# Lets the API gateway's routes send to this service (the backend's owner grants it).
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-api-gateway
+spec:
+  from:
+    - { group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: api-gateway }
+  to:
+    - { group: "", kind: Service, name: otp-service }
+---
+# Channels reach the OTP API only through the gateway; Traefik reaches only the phone UI host.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otp-service-ingress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: otp-service }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.gatewayNamespace }} } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }} } }
+        {{- if .Values.phone.enabled }}
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }} } }
+        {{- end }}
+      ports:
+        - { port: 8080, protocol: TCP }
+{{- if .Values.phone.enabled }}
+---
+# The simulated phone, for testers: only /phone on its own host, never the OTP API.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: phone
+spec:
+  ingressClassName: {{ .Values.phone.ingressClassName }}
+  rules:
+    - host: {{ .Values.phone.host | quote }}
+      http:
+        paths:
+          - path: /phone
+            pathType: Prefix
+            backend: { service: { name: otp-service, port: { name: http } } }
+{{- end }}

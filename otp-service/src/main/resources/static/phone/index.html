@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulated phone</title>
+  <link rel="stylesheet" href="phone.css">
+</head>
+<body>
+  <main class="phone" aria-labelledby="title">
+    <p class="banner">Simulated phone: test data only. Real phones never see these messages.</p>
+    <h1 id="title">Messages</h1>
+    <form id="lookup">
+      <label for="msisdn">Mobile number</label>
+      <input id="msisdn" name="msisdn" type="tel" inputmode="tel" autocomplete="off" value="+91" pattern="\+91[6-9][0-9]{9}" required>
+      <button type="submit">Show messages</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+    <ol id="messages" class="messages"></ol>
+  </main>
+  <script src="phone.js"></script>
+</body>
+</html>

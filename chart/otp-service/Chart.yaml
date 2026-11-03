@@ -1,0 +1,6 @@
+apiVersion: v2
+name: otp-service
+description: Simulated OTP and SMS service with a simulated phone (sim-comms)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
