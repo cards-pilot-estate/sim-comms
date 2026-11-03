@@ -1,0 +1,5 @@
+target/
+*.tar
+.env
+.DS_Store
+.idea/
