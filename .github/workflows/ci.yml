@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Build and test (Testcontainers Redis)
+        run: ./mvnw -B verify
+      - name: Container image builds
+        run: docker build -f docker/Dockerfile --build-arg MODULE=otp-service -t otp-service:ci .
+  chart:
+    name: Chart lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - run: |
+          helm lint chart/otp-service -f environments/dev.yaml
+          helm lint chart/otp-service -f environments/uat.yaml

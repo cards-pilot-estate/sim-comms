@@ -1,0 +1,4 @@
+environment: dev
+phone:
+  host: phone.dev.localtest.me
+testHooks: true   # dev only: end-to-end tests read the last code

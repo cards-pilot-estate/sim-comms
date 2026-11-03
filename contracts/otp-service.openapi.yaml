@@ -1,0 +1,110 @@
+openapi: 3.1.0
+info:
+  title: otp-service (simulated)
+  version: 0.1.0
+  description: >
+    One-time codes and template SMS for channels, owned by the comms team (sim-comms).
+    Fidelity: illustrative. Channels call it only through the API gateway with a client-credentials
+    token whose audience is comms-api-<env>; every call names the customer in x-customer-key.
+    Limits: a code is valid 10 minutes; resend after 30 s; 3 wrong tries; at most 5 codes per
+    mobile number in any 30 minutes. Only HMACs of numbers and codes are stored.
+security:
+  - bearer: []
+paths:
+  /otp/v1/challenges:
+    post:
+      summary: Send a code
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 128 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendRequest" }
+      responses:
+        "202": { description: Sent (or the same challenge, for a repeated key), content: { application/json: { schema: { $ref: "#/components/schemas/Challenge" } } } }
+        "400": { description: INVALID_MSISDN or INVALID_REQUEST, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: OTP_SEND_LIMIT, with Retry-After, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /otp/v1/challenges/{challengeId}/resend:
+    post:
+      summary: A new code for the same challenge
+      parameters:
+        - { name: challengeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResendRequest" }
+      responses:
+        "202": { description: Resent, content: { application/json: { schema: { $ref: "#/components/schemas/Challenge" } } } }
+        "404": { description: OTP_NOT_FOUND (also for another client, binding or number), content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: OTP_RESEND_TOO_SOON or OTP_SEND_LIMIT, with Retry-After, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /otp/v1/challenges/{challengeId}/verification:
+    post:
+      summary: Verify a code; returns a signed proof
+      parameters:
+        - { name: challengeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VerifyRequest" }
+      responses:
+        "200": { description: Verified, content: { application/json: { schema: { $ref: "#/components/schemas/Verified" } } } }
+        "404": { description: OTP_NOT_FOUND (unknown, used, another client or binding), content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "410": { description: OTP_EXPIRED or OTP_ATTEMPTS_EXHAUSTED, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: OTP_INCORRECT with attemptsRemaining, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /otp/v1/jwks.json:
+    get:
+      summary: Public keys that verify proofs (ES256)
+      security: []
+      responses:
+        "200": { description: A JWK set; Cache-Control max-age=600 }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    SendRequest:
+      type: object
+      required: [purpose, msisdn, subjectRef, bindingHash]
+      properties:
+        purpose: { type: string, enum: [SIGN_IN, STEP_UP] }
+        msisdn: { type: string, pattern: "^\\+91[6-9][0-9]{9}$" }
+        subjectRef: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$", description: "The caller's opaque customer key; becomes the proof's sub" }
+        bindingHash: { type: string, pattern: "^[A-Za-z0-9_-]{22,128}$", description: "base64url(SHA-256(nonce)); the nonce stays in the caller's session" }
+        locale: { type: string }
+    ResendRequest:
+      type: object
+      required: [msisdn, bindingHash]
+      properties:
+        msisdn: { type: string, description: "Must be the number the challenge was sent to" }
+        bindingHash: { type: string }
+    VerifyRequest:
+      type: object
+      required: [code, bindingHash]
+      properties:
+        code: { type: string, maxLength: 12 }
+        bindingHash: { type: string }
+    Challenge:
+      type: object
+      properties:
+        challengeId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        resendAvailableAt: { type: string, format: date-time }
+        codeLength: { type: integer }
+    Verified:
+      type: object
+      properties:
+        result: { type: string, enum: [VERIFIED] }
+        proof:
+          type: string
+          description: >
+            JWS, header {alg: ES256, kid, typ: otp-proof+jwt}; claims iss urn:sim-comms:otp-service:<env>,
+            aud = the caller's azp, sub = subjectRef, pur, cid = challengeId, bnd = bindingHash,
+            amr [otp, sms], iat, exp = iat + 300 s, jti
+    Error:
+      type: object
+      properties:
+        errorCode: { type: string }
+        message: { type: string }
+        attemptsRemaining: { type: integer }

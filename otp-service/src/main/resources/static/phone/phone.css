@@ -1,0 +1,10 @@
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: #eef2f1; color: #0b0c0c; }
+.phone { max-width: 26rem; margin: 1rem auto; background: #fff; border-radius: 1.5rem; padding: 1.25rem; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+.banner { background: #fff4d6; border-left: 4px solid #b58100; padding: .5rem .75rem; font-size: .9rem; }
+label { display: block; font-weight: 600; margin-top: .5rem; }
+input { font-size: 1.1rem; padding: .5rem; width: 100%; box-sizing: border-box; border: 2px solid #0b0c0c; }
+button { margin-top: .75rem; min-height: 44px; padding: .5rem 1rem; font-size: 1rem; background: #00594f; color: #fff; border: 0; border-radius: .25rem; cursor: pointer; }
+button:focus, input:focus { outline: 3px solid #ffbf47; outline-offset: 2px; }
+.messages { list-style: none; padding: 0; }
+.messages li { background: #e7f1ef; border-radius: 1rem; padding: .75rem 1rem; margin: .75rem 0; }
+.messages time { display: block; font-size: .8rem; color: #505a5f; }

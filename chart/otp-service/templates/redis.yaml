@@ -1,0 +1,57 @@
+# The service's own short-lived state: challenges (15 min), send logs (30 min), the simulated inbox (24 h).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otp-redis
+  labels: { app.kubernetes.io/name: otp-redis, app.kubernetes.io/part-of: sim-comms }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: otp-redis }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: otp-redis, app.kubernetes.io/part-of: sim-comms }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          args: ["--save", "", "--appendonly", "no", "--maxmemory", "48mb", "--maxmemory-policy", "volatile-ttl"]
+          ports:
+            - { name: redis, containerPort: 6379 }
+          resources: {{- toYaml .Values.redis.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otp-redis
+spec:
+  selector: { app.kubernetes.io/name: otp-redis }
+  ports:
+    - { name: redis, port: 6379, targetPort: redis }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otp-redis
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: otp-redis }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/name: otp-service } }
+      ports:
+        - { port: 6379 }

@@ -1,0 +1,5 @@
+environment: uat
+phone:
+  host: phone.uat.localtest.me
+testHooks: false
+replicas: 2

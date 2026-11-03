@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: otp-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  threads:
+    virtual:
+      enabled: true
+server:
+  shutdown: graceful
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+app:
+  otp:
+    validity: 10m
+    resend-after: 30s
+    max-attempts: 3
+    max-sends-per-window: 5
+    send-window: 30m
+    code-length: 6
+    proof-validity: 5m
+    hmac-key: ${OTP_HMAC_KEY:local-otp-hmac-key-not-for-real-use}
+    signing-key-pem: ${OTP_SIGNING_KEY_PEM:}
+    signing-public-pem: ${OTP_SIGNING_PUBLIC_PEM:}
+    key-id: otp-${APP_ENVIRONMENT:local}-1
+    environment: ${APP_ENVIRONMENT:local}
+    brand: Ondaro Bank   # fictional placeholder (R22)
+    inbox-size: 20
+    inbox-retention: 24h
+  phone:
+    enabled: ${PHONE_UI_ENABLED:true}
+  iam:
+    issuer: ${APP_IAM_ISSUER:http://iam.localtest.me/realms/cards}
+    jwks-uri: ${APP_IAM_JWKS_URI:http://iam.localtest.me/realms/cards/protocol/openid-connect/certs}
+    audience: ${APP_IAM_AUDIENCE:comms-api-local}
+logging:
+  pattern:
+    level: "%5p [${spring.application.name}]"
