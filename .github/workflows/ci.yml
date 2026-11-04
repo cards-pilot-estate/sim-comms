@@ -35,3 +35,43 @@ jobs:
       - run: |
           helm lint chart/otp-service -f environments/dev.yaml
           helm lint chart/otp-service -f environments/uat.yaml
+  publish:
+    name: Publish image
+    needs: [build, chart]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Package the jar
+        run: ./mvnw -B -q package -DskipTests
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push (amd64 and arm64, SBOM and provenance)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            MODULE=otp-service
+            REVISION=${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/otp-service:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/otp-service:main
+          sbom: true
+          provenance: mode=max
