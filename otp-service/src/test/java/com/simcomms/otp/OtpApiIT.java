@@ -194,6 +194,19 @@ class OtpApiIT {
     }
 
     @Test
+    void aVerifiedChallengeCannotBeResent() throws Exception {
+        String id = challenge("channel-web-test");
+        verify("channel-web-test", id, lastCode(), binding).andExpect(status().isOk());
+        clock.advance(Duration.ofSeconds(31));
+        mvc.perform(post("/otp/v1/challenges/{id}/resend", id).with(jwt().jwt(j -> j.claim("azp", "channel-web-test")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("msisdn", msisdn, "bindingHash", binding))))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("OTP_NOT_FOUND"));
+        String inbox = mvc.perform(get("/phone/v1/inbox").param("msisdn", msisdn)).andReturn().getResponse().getContentAsString();
+        assertThat(json.readTree(inbox)).as("no second SMS").hasSize(1);
+    }
+
+    @Test
     void aSixthCodeForOneNumberInThirtyMinutesFails() throws Exception {
         for (int i = 0; i < 5; i++) {
             challenge("channel-web-test");
