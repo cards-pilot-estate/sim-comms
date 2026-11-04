@@ -101,7 +101,8 @@ public class OtpService {
      */
     public Challenge resend(String client, String challengeId, String msisdn, String bindingHash) {
         Map<Object, Object> c = owned(client, challengeId, bindingHash);
-        if (msisdn == null || !Keys.sameHex(keys.msisdn(msisdn), (String) c.get("msisdn"))) {
+        // A verified challenge is finished: no new code, no SMS (same answer as an unknown id).
+        if (c.containsKey("usedAt") || msisdn == null || !Keys.sameHex(keys.msisdn(msisdn), (String) c.get("msisdn"))) {
             throw OtpException.notFound();
         }
         Instant now = clock.instant();
