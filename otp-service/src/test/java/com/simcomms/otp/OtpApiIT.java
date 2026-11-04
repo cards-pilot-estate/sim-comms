@@ -251,4 +251,12 @@ class OtpApiIT {
                         "bindingHash", binding)))).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_MSISDN"));
     }
+
+    @Test
+    void theSimulatedPhoneAnswersOnItsDocumentedAddress() throws Exception {
+        for (String path : new String[] {"/phone", "/phone/"}) {
+            mvc.perform(get(path)).andExpect(status().isFound()).andExpect(header().string("Location", "/phone/index.html"));
+        }
+        mvc.perform(get("/phone/index.html")).andExpect(status().isOk());
+    }
 }
